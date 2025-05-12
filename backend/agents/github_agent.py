@@ -1,29 +1,37 @@
-import httpx
+from backend.services.llm_client import extract_github_params
 
-GITHUB_API = "https://api.github.com"
+async def handle_github(text, default_repo=None, default_token=None, limit=5):
+    parsed = await extract_github_params(text)
+    repo = parsed.get("repo") or default_repo
+    token = default_token
+    state = parsed.get("state", "open")
+    limit = parsed.get("limit", limit)
 
-async def handle_github(text, repo: str, token: str, limit: int = 5):
+    if not repo or not token:
+        return ["Missing repo or token"]
+
     headers = {
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3+json"
     }
-    url = f"{GITHUB_API}/repos/{repo}/pulls"
+
+    params = {
+        "state": state,
+        "per_page": limit
+    }
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(url, headers=headers, params={"state": "open", "per_page": limit})
+            response = await client.get(f"https://api.github.com/repos/{repo}/pulls", headers=headers, params=params)
             response.raise_for_status()
             prs = response.json()
 
-        summaries = []
-        for pr in prs:
-            summaries.append(
-                f"PR #{pr['number']} by {pr['user']['login']} — \"{pr['title']}\" (Status: {pr['state']})"
-            )
-
-        return summaries if summaries else ["No open pull requests found."]
-
+        return [
+            f"PR #{pr['number']} by {pr['user']['login']} — \"{pr['title']}\" (Status: {pr['state']})"
+            for pr in prs
+        ] or ["No matching pull requests."]
+    
     except httpx.HTTPStatusError as e:
         return [f"GitHub API Error: {e.response.status_code} - {e.response.text}"]
-    except Exception as e:
-        return [f"Unexpected error: {str(e)}"]
+    except Exception as ex:
+        return [f"Unexpected error: {str(ex)}"]

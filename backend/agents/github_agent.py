@@ -2,6 +2,8 @@ from backend.services.llm_client import extract_github_params
 
 async def handle_github(text, default_repo=None, default_token=None, limit=5):
     parsed = await extract_github_params(text)
+    print("🧠 LLM parsed:", parsed)
+
     repo = parsed.get("repo") or default_repo
     token = default_token
     state = parsed.get("state", "open")
